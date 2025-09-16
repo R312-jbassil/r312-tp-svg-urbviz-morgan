@@ -1,0 +1,249 @@
+---
+const title = "Générateur SVG";
+import "../styles/global.css";
+---
+
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>{title}</title>
+  </head>
+
+  <body class="min-h-screen bg-gradient-to-br from-base-200 via-base-100 to-base-300 text-base-content p-8">
+    <main class="mx-auto w-full max-w-7xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+
+      <!-- DIV 1 : Prompt utilisateur -->
+      <div class="card rounded-2xl border border-base-300/30 bg-base-100/80 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-shadow">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-lg font-semibold">Prompt</h2>
+
+          <textarea
+            id="user-prompt"
+            class="textarea textarea-primary w-full h-44 rounded-xl"
+            placeholder="Décris l’illustration que tu veux générer..."
+          ></textarea>
+
+          <button
+            id="generate-button"
+            class="btn btn-primary btn-block rounded-xl"
+          >
+            Générer
+          </button>
+        </div>
+      </div>
+
+      <!-- DIV 2 : Code généré -->
+      <div class="card rounded-2xl border border-base-300/30 bg-base-100/80 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-shadow">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-lg font-semibold">Code SVG</h2>
+
+          <pre class="mockup-code w-full h-96 rounded-xl overflow-auto shadow-inner">
+<code id="svg-output" class="text-xs leading-relaxed whitespace-pre-wrap"></code>
+          </pre>
+
+          <label class="form-control w-full mt-2">
+            <span class="label-text opacity-80">Nom du SVG</span>
+            <input
+              id="svg-name"
+              class="input input-primary w-full rounded-xl"
+              placeholder="Mon illustration"
+            />
+          </label>
+
+          <button
+            id="save-button"
+            type="button"
+            class="btn btn-accent mt-2 rounded-xl"
+          >
+            Enregistrer dans la bibliothèque
+          </button>
+
+          <p id="save-status" class="text-xs opacity-70 mt-1"></p>
+        </div>
+      </div>
+
+      <!-- DIV 3 : Aperçu SVG -->
+      <div class="card rounded-2xl border border-base-300/30 bg-base-100/80 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-shadow">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-lg font-semibold">Aperçu</h2>
+
+          <div
+            id="svg-container"
+            class="w-full min-h-80 aspect-video flex items-center justify-center bg-base-200/70 rounded-2xl border border-base-300/30 shadow-inner overflow-auto"
+          >
+            <span class="opacity-60">Ton SVG apparaîtra ici</span>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Script côté client -->
+    <script>
+      //@ts-nocheck
+      const promptElement = document.getElementById("user-prompt");
+      const svgContainer = document.getElementById("svg-container");
+      const svgOutput = document.getElementById("svg-output");
+      const generateButton = document.getElementById("generate-button");
+      const svgNameInput = document.getElementById("svg-name");
+      const saveButton = document.getElementById("save-button");
+      const saveStatus = document.getElementById("save-status");
+      let lastGeneratedSvg = "";
+
+      async function generateSVG(prompt) {
+        console.log("Generating SVG for prompt:", prompt);
+        const res = await fetch("/api/generateSVG", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        const data = await res.json();
+        return data.svg;
+      }
+
+      async function handleSubmit() {
+        const prompt = promptElement ? (promptElement.value || "").trim() : "";
+
+        if (!prompt) {
+          if (svgOutput) {
+            svgOutput.textContent = "Veuillez entrer un prompt.";
+          }
+          if (svgContainer) {
+            svgContainer.innerHTML =
+              '<span class="text-base-content/60">Aucun prompt fourni.</span>';
+          }
+          lastGeneratedSvg = "";
+          if (saveButton) saveButton.disabled = true;
+          if (saveStatus) saveStatus.textContent = "";
+          return;
+        }
+
+        lastGeneratedSvg = "";
+        if (saveButton) saveButton.disabled = true;
+        if (saveStatus) saveStatus.textContent = "";
+
+        if (svgContainer) {
+          svgContainer.innerHTML =
+            '<span class="loading loading-ring loading-xl"></span>';
+        }
+        if (generateButton) {
+          generateButton.disabled = true;
+        }
+
+        try {
+          const svgCode = await generateSVG(prompt);
+          console.log("svgCode:", svgCode);
+          lastGeneratedSvg = svgCode || "";
+
+          if (svgOutput) {
+            svgOutput.textContent = lastGeneratedSvg || "Aucun SVG reçu.";
+          }
+          if (svgContainer) {
+            svgContainer.innerHTML =
+              lastGeneratedSvg ||
+              '<span class="text-base-content/60">Aucun SVG reçu.</span>';
+          }
+          if (saveButton) {
+            saveButton.disabled = !lastGeneratedSvg;
+          }
+        } catch (e) {
+          console.error(e);
+          lastGeneratedSvg = "";
+          if (svgOutput) {
+            svgOutput.textContent = "Erreur lors de la génération.";
+          }
+          if (svgContainer) {
+            svgContainer.innerHTML =
+              '<span class="text-error">Erreur de génération</span>';
+          }
+          if (saveStatus) {
+            saveStatus.textContent = "Impossible de générer le SVG.";
+          }
+        } finally {
+          if (generateButton) {
+            generateButton.disabled = false;
+          }
+        }
+      }
+
+      async function handleSave() {
+        if (!saveButton) return;
+
+        const name = svgNameInput ? (svgNameInput.value || "").trim() : "";
+
+        if (!lastGeneratedSvg) {
+          if (saveStatus) {
+            saveStatus.textContent = "Générez un SVG avant de l’enregistrer.";
+          }
+          return;
+        }
+
+        if (!name) {
+          if (saveStatus) {
+            saveStatus.textContent = "Merci de saisir un nom.";
+          }
+          if (svgNameInput) {
+            svgNameInput.focus();
+          }
+          return;
+        }
+
+        saveButton.disabled = true;
+        if (saveStatus) {
+          saveStatus.textContent = "Enregistrement...";
+        }
+
+        try {
+          const res = await fetch("/api/saveSVG", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name,
+              svg: lastGeneratedSvg,
+            }),
+          });
+
+          let data = null;
+          try {
+            data = await res.json();
+          } catch (err) {
+            console.warn("No JSON response for saveSVG", err);
+          }
+
+          if (!res.ok || !data || !data.ok) {
+            const errorMessage =
+              (data && data.error) || "Erreur lors de l’enregistrement.";
+            throw new Error(errorMessage);
+          }
+
+          if (saveStatus) {
+            saveStatus.textContent = "SVG enregistré !";
+          }
+          if (svgNameInput) {
+            svgNameInput.value = "";
+          }
+        } catch (error) {
+          console.error(error);
+          const message =
+            (error && error.message) || "Enregistrement impossible.";
+          if (saveStatus) {
+            saveStatus.textContent = "Erreur : " + message;
+          }
+        } finally {
+          if (saveButton) {
+            saveButton.disabled = !lastGeneratedSvg;
+          }
+        }
+      }
+
+      if (generateButton) {
+        generateButton.addEventListener("click", handleSubmit);
+      }
+
+      if (saveButton) {
+        saveButton.addEventListener("click", handleSave);
+        saveButton.disabled = true;
+      }
+    </script>
+  </body>
+</html>
